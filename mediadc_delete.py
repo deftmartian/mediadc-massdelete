@@ -11,8 +11,6 @@ parser = argparse.ArgumentParser(
 
 parser.add_argument('--exclude',type=str,nargs='+',
                     help='Do not delete files whose path contains this (if size is similar)')
-parser.add_argument('--include',type=str,nargs='+',
-                    help='Prefer to delete files whose path contains this (if size is similar)')
 parser.add_argument('--dry-run',action='store_true',default=False,
                     help='Do not actually delete files')
 
@@ -68,36 +66,6 @@ def remove(path):
     except ResponseErrorCode as e:
         print(f"  error {e} while deleting {path}")
 
-def choose(a,b):
-    """
-    Select between two copies of the same picture with the same size
-    """
-    l = [a,b]
-    dst = [a,b]
-    for e in args.exclude:
-        for s in l:
-            if e in s['filepath']:
-                dst.remove(s)
-    if len(dst) == 0:
-        print("  Exclusion patterns removed all files...")
-        return None
-    if len(dst) == 1:
-        return dst[0]
-
-    inc = {}
-    for e in args.include:
-        for s in l:
-            if e in s['filepath']:
-                inc[s['filepath']] = s
-    if len(inc) == 0:
-        print("  Inclusion patterns did not select a file...")
-        return None
-    if len(inc) == 1:
-        return next(iter(inc.items()))[1]
-
-    print("  Could not decide...")
-    return None
-
 dc = json.load(open(args.json))
 for result in dc["Results"]:
     all_files=result["files"]
@@ -106,27 +74,27 @@ for result in dc["Results"]:
         if f['filepath'].startswith("files_trashbin"):
             continue
         files.append(f)
-    if len(files) == 2:
-        a = files[0]
-        b = files[1]
+    if len(files) >= 2:
 
-        if args.different_path_only and \
-            pathlib.Path(a["filepath"]).parent.resolve() == pathlib.Path(b["filepath"]).parent.resolve():
-                print(f"Ignoring files in the same folder : {a['filepath']} {b['filepath']}")
-                continue
+        files.sort(key=lambda x : x["filesize"], reverse=True)
+        
+        kept_file = files[0]
 
+        if files:
+            files.remove(files[0])
 
-        if a["filesize"] == b["filesize"]:
-            print(f"File with the same size : {a['filepath']} {b['filepath']}")
-            f = choose(a,b)
-        else:
-            if a["filesize"] < b["filesize"]:
-                f = a
-            else:
-                f = b
-        if f:
-            print(f"Deleting {f['filename']} ({a['filepath']} {b['filepath']})")
-            try:
-                remove(f['filepath'])
-            except Exception as e:
-                print(f"ERROR while deleting {f['filename']}")
+        print(f"Keeping {kept_file['filename']} {kept_file['filepath']} {kept_file['filesize']}")
+        if files:
+            for duplicate in files:
+
+                if args.different_path_only and \
+                pathlib.Path(kept_file["filepath"]).parent.resolve() == pathlib.Path(duplicate["filepath"]).parent.resolve():
+                    print(f"Ignoring files in the same folder : {kept_file['filepath']} {duplicate['filepath']}")
+                    continue
+
+                print(f"Deleting {duplicate['filename']} {duplicate['filepath']} {duplicate['filesize']}")
+                try:
+                    remove(duplicate['filepath'])
+                except Exception as e:
+                    print(f"ERROR while deleting {duplicate['filename']}")
+
