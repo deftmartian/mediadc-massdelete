@@ -1,6 +1,12 @@
 # MediaDC Mass Deleter
 
 Use the json export of MediaDC (NextCloud app) to delete duplicates pictures massively
+
+#### Setup:
+- `python3 venv myenv`
+- `source myenv/bin/activate`
+- `pip install webdavclient3`
+- `python3 mediadc_delete.py --help`
   
 
     usage: MediaDC - Mass deleter [-h] [--exclude EXCLUDE [EXCLUDE ...]] [--include INCLUDE [INCLUDE ...]] [--dry-run] [--different-path-only] --host
