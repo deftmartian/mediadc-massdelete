@@ -9,8 +9,6 @@ parser = argparse.ArgumentParser(
                     description='Takes the json export from MediaDC and massively delete all replicates',
                     )
 
-parser.add_argument('--exclude',type=str,nargs='+',
-                    help='Do not delete files whose path contains this (if size is similar)')
 parser.add_argument('--dry-run',action='store_true',default=False,
                     help='Do not actually delete files')
 
@@ -30,12 +28,12 @@ parser.add_argument('--verify-ssl',action='store_true',default=False,
 parser.add_argument('json',type=str,
                     help='Path to the json file')
 
+parser.add_argument('--prefer-from-filepath',type=str,nargs='+',
+                    help='Prefer to keep a file from the given path (if size is similar)')
+
 
 args = parser.parse_args()
-if args.exclude is None:
-    args.exclude = []
-if args.include is None:
-    args.include = []
+
 
 # Connect to webdav
 options = {
@@ -48,7 +46,7 @@ options = {
 client = Client(options)
 client.verify = args.verify_ssl
 
-def remove(path):
+def removefile(path):
     """
     Actually removes a remote file given its path
     """
@@ -67,7 +65,10 @@ def remove(path):
         print(f"  error {e} while deleting {path}")
 
 dc = json.load(open(args.json))
+count = 0
 for result in dc["Results"]:
+    print(f"result number {count}")
+    count += 1
     all_files=result["files"]
     files = []
     for f in all_files:
@@ -79,11 +80,26 @@ for result in dc["Results"]:
         files.sort(key=lambda x : x["filesize"], reverse=True)
         
         kept_file = files[0]
+         
+        if args.prefer_from_filepath:
+            basesize = files[0]['filesize']
+            for duplicate in files:
+                if args.prefer_from_filepath[0] in duplicate["filepath"] and \
+                abs(basesize - duplicate["filesize"]) < 1024: 
+                    kept_file = duplicate 
+                    print(f"Prefering file from path : {kept_file['filepath']} {kept_file['filesize']}")
+                    break
+            if args.prefer_from_filepath[0] not in kept_file["filepath"]:
+                print(f"No prefered file found, keeping the biggest one : {kept_file['filepath']} {kept_file['filesize']}")
+        
+                
+        else:
+            print(f"Keeping {kept_file['filepath']} {kept_file['filesize']}")
+
 
         if files:
-            files.remove(files[0])
+            files.remove(kept_file) # Remove the kept file from the list
 
-        print(f"Keeping {kept_file['filename']} {kept_file['filepath']} {kept_file['filesize']}")
         if files:
             for duplicate in files:
 
@@ -92,9 +108,9 @@ for result in dc["Results"]:
                     print(f"Ignoring files in the same folder : {kept_file['filepath']} {duplicate['filepath']}")
                     continue
 
-                print(f"Deleting {duplicate['filename']} {duplicate['filepath']} {duplicate['filesize']}")
+                print(f"Deleting {duplicate['filepath']} {duplicate['filesize']}")
                 try:
-                    remove(duplicate['filepath'])
+                    removefile(duplicate['filepath'])
                 except Exception as e:
                     print(f"ERROR while deleting {duplicate['filename']}")
 
